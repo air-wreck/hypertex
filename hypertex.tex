@@ -1,0 +1,92 @@
+\documentclass{article}
+\usepackage{soul}
+\usepackage{xstring}
+\usepackage{environ}
+\usepackage{xcolor}
+
+%%% This implements a very basic (and incomplete) parser for HTML
+%%% implemented in LaTeX. The parser is a state machine that consumes
+%%% the input character-by-character.
+
+% Parser state is one of:
+%   ReadingText
+%   ReadingTag
+\newcommand*{\ParserState}{ReadingText}
+
+% We accumulate the current tag name we're parsing character by
+% character.
+\newcommand*{\CurrentTagName}{}
+
+% The tag mode (for the tag we're currently parsing) can be one of:
+%   Open    <tag>
+%   Close   </tag>
+\newcommand*{\CurrentTagMode}{}
+
+% We track a stack of open tags and provide some basic utilities for
+% manipulating the stack. We use the symbol "@" as an internal
+% separator, since no HTML tag has "@" in its name.
+\newcommand*{\OpenTagStack}{}
+
+\newcommand*{\PopOpenTag}[1]{%
+  \StrCut{\OpenTagStack}{@}#1\RestOfStack%
+  \xdef\OpenTagStack{\RestOfStack}}
+
+\newcommand*{\PushOpenTag}[1]{%
+  \xdef\OpenTagStack{#1@\OpenTagStack}}
+
+% Print a warning message in the generated LaTeX code.
+\newcommand*{\EmitWarning}[1]{%
+  \textcolor{red}{#1}}
+
+\newcommand*{\HandleTextChar}[1]{%
+  \IfStrEq{#1}{<}{%
+    \renewcommand*{\CurrentTagMode}{Open}%
+    \renewcommand*{\CurrentTagName}{}%
+    \renewcommand*{\ParserState}{ReadingTag}%
+  }{#1}%
+}
+
+\newcommand*{\HandleTagChar}[1]{%
+  \IfStrEqCase{#1}{%
+    {/}{\renewcommand*{\CurrentTagMode}{Close}}%
+    {>}{%
+      % Read Tag: \CurrentTagName in mode: \CurrentTagMode
+      \IfStrEqCase{\CurrentTagMode}{%
+        {Open}{\PushOpenTag{\CurrentTagName}}%
+        {Close}{%
+          \PopOpenTag{\TopTag}%
+          \IfStrEq{\CurrentTagName}{\TopTag}{}{%
+            \EmitWarning{Closing tag \CurrentTagName{} does not match
+              expected \TopTag}%
+          }%
+        }%
+      }%
+      \renewcommand*{\ParserState}{ReadingText}}%
+  }[\edef\CurrentTagName{\CurrentTagName #1}]%
+}
+
+% We abuse the soul package's [\so] command to process the input
+% character stream.
+\sodef\so{}{0em}{0em}{0em}
+\makeatletter
+\def\SOUL@soeverytoken{%
+  \IfStrEqCase{\ParserState}{%
+    {ReadingText}{\HandleTextChar{\the\SOUL@token}}%
+    {ReadingTag}{\HandleTagChar{\the\SOUL@token}}%
+  }%
+}
+\makeatother
+\NewEnviron{html}{%
+  \so\BODY%
+  \IfStrEq{\OpenTagStack}{}{}{%
+    \EmitWarning{There were unclosed tags: \OpenTagStack.}
+  }%
+}
+
+\begin{document}
+\begin{html}
+  Foo Bar <h1> \par
+  Baz \par
+  Qux
+\end{html}
+\end{document}

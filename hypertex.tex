@@ -34,27 +34,47 @@
 \newcommand*{\PushOpenTag}[1]{%
   \xdef\OpenTagStack{#1@\OpenTagStack}}
 
+% The output buffer stores the generated LaTeX code.
+\newcommand*{\OutputBuffer}{}
+\newcommand*{\WriteOutput}[1]{%
+  \xdef\OutputBuffer{\OutputBuffer#1}}
+
 % Print a warning message in the generated LaTeX code.
 \newcommand*{\EmitWarning}[1]{%
-  \textcolor{red}{#1}}
+  \WriteOutput{\string\textcolor{red}{#1}}}
+
+\makeatletter
+\newcommand*{\HandleOpenTag}[1]{%
+  \IfStrEqCase{#1}{%
+    {h1}{\WriteOutput{\string\section\@charlb}}%
+    {h2}{\WriteOutput{\string\subsection\@charlb}}%
+    {h3}{\WriteOutput{\string\subsubsection\@charlb}}%
+    {em}{\WriteOutput{\string\emph\@charlb}}%
+    {strong}{\WriteOutput{\string\textbf\@charlb}}%
+  }[\WriteOutput{\@charlb}%
+    \EmitWarning{Unrecognized tag #1}]}
+\makeatother
 
 \newcommand*{\HandleTextChar}[1]{%
   \IfStrEq{#1}{<}{%
     \renewcommand*{\CurrentTagMode}{Open}%
     \renewcommand*{\CurrentTagName}{}%
     \renewcommand*{\ParserState}{ReadingTag}%
-  }{#1}%
+  }{\WriteOutput{#1}}%
 }
 
+\makeatletter
 \newcommand*{\HandleTagChar}[1]{%
   \IfStrEqCase{#1}{%
     {/}{\renewcommand*{\CurrentTagMode}{Close}}%
     {>}{%
-      % Read Tag: \CurrentTagName in mode: \CurrentTagMode
       \IfStrEqCase{\CurrentTagMode}{%
-        {Open}{\PushOpenTag{\CurrentTagName}}%
-        {Close}{%
+        {Open}{%
+          \PushOpenTag{\CurrentTagName}%
+          \HandleOpenTag{\CurrentTagName}%
+        }{Close}{%
           \PopOpenTag{\TopTag}%
+          \WriteOutput{\@charrb}%
           \IfStrEq{\CurrentTagName}{\TopTag}{}{%
             \EmitWarning{Closing tag \CurrentTagName{} does not match
               expected \TopTag}%
@@ -64,6 +84,7 @@
       \renewcommand*{\ParserState}{ReadingText}}%
   }[\edef\CurrentTagName{\CurrentTagName #1}]%
 }
+\makeatother
 
 % We abuse the soul package's [\so] command to process the input
 % character stream.
@@ -81,11 +102,19 @@
   \IfStrEq{\OpenTagStack}{}{}{%
     \EmitWarning{There were unclosed tags: \OpenTagStack.}
   }%
+  % We need a temporary file to write the generated LaTeX code in.
+  % TODO: we could possibly replace this with \scantokens
+  \newwrite\OutputFile
+  \immediate\openout\OutputFile=\jobname.tmp
+  \immediate\write\OutputFile{\OutputBuffer}
+  \immediate\closeout\OutputFile%
+  \input{\jobname.tmp}%
 }
 
 \begin{document}
 \begin{html}
-  Foo Bar <h1> \par
+  <h1>Title</h1>
+  Foo Bar \par
   Baz \par
   Qux
 \end{html}

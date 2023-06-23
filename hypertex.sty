@@ -1,0 +1,151 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{hypertex}[2023/06/23 Hypertex Markup Language]
+
+%%% This implements a very basic (and incomplete) parser for HTML
+%%% implemented in LaTeX. The parser is a state machine that consumes
+%%% the input character-by-character.
+
+\RequirePackage[normalem]{ulem}
+\RequirePackage{xstring}
+\RequirePackage{environ}
+\RequirePackage{xcolor}
+
+% Parser state is one of:
+%   ReadingText
+%   ReadingTag
+\newcommand*{\ParserState}{ReadingText}
+
+% We accumulate the current tag name we're parsing character by
+% character.
+\newcommand*{\CurrentTagName}{}
+
+% The tag mode (for the tag we're currently parsing) can be one of:
+%   Open    <tag>
+%   Close   </tag>
+\newcommand*{\CurrentTagMode}{}
+
+% We track a stack of open tags and provide some basic utilities for
+% manipulating the stack. We use the symbol "@" as an internal
+% separator, since no HTML tag has "@" in its name.
+\newcommand*{\OpenTagStack}{}
+
+\newcommand*{\PopOpenTag}[1]{%
+  \StrCut{\OpenTagStack}{@}#1\RestOfStack%
+  \xdef\OpenTagStack{\RestOfStack}}
+
+\newcommand*{\PushOpenTag}[1]{%
+  \xdef\OpenTagStack{#1@\OpenTagStack}}
+
+% The output buffer stores the generated LaTeX code.
+\newcommand*{\OutputBuffer}{}
+\newcommand*{\WriteOutput}[1]{%
+  \xdef\OutputBuffer{\OutputBuffer#1}}
+
+% Print a warning message in the generated LaTeX code.
+\newcommand*{\EmitWarning}[1]{%
+  \WriteOutput{\string\textcolor{red}{(Error: #1)}}}
+
+\ExplSyntaxOn
+\str_const:Nn\TagHead{h1}
+\str_const:Nn\TagSubHead{h2}
+\str_const:Nn\TagSubSubHead{h3}
+\str_const:Nn\TagEm{em}
+\str_const:Nn\TagStrong{strong}
+\str_const:Nn\TagMono{tt}
+\str_const:Nn\TagStrike{s}
+\str_const:Nn\TagPar{p}
+\str_const:Nn\TagUList{ul}
+\str_const:Nn\TagOList{ol}
+\str_const:Nn\TagItem{li}
+\ExplSyntaxOff
+
+% To avoid difficulties with writing newlines, we expand \par after
+% copying, using a temporary \EndParagraph token.
+\newcommand*{\EndParagraph}{\par}
+
+\makeatletter
+\newcommand*{\HandleOpenTag}[1]{%
+  \PushOpenTag{#1}%
+  \IfStrEqCase{#1}{%
+    {\TagHead}      {\WriteOutput{\string\section\@charlb}}%
+    {\TagSubHead}   {\WriteOutput{\string\subsection\@charlb}}%
+    {\TagSubSubHead}{\WriteOutput{\string\subsubsection\@charlb}}%
+    {\TagEm}        {\WriteOutput{\string\emph\@charlb}}%
+    {\TagStrong}    {\WriteOutput{\string\textbf\@charlb}}%
+    {\TagMono}      {\WriteOutput{\string\texttt\@charlb}}%
+    {\TagStrike}    {\WriteOutput{\string\sout\@charlb}}%
+    {\TagPar}       {}%
+    {\TagUList}     {\WriteOutput{\string\begin{itemize}}}%
+    {\TagOList}     {\WriteOutput{\string\begin{enumerate}}}%
+    {\TagItem}      {\WriteOutput{\string\item\ }}%
+  }[\EmitWarning{Unrecognized tag #1}]%
+}
+
+\newcommand*{\HandleCloseTag}[1]{%
+  \PopOpenTag{\TopTag}%
+  \IfStrEqCase{#1}{%
+    {\TagHead}      {\WriteOutput{\@charrb}}%
+    {\TagSubHead}   {\WriteOutput{\@charrb}}%
+    {\TagSubSubHead}{\WriteOutput{\@charrb}}%
+    {\TagEm}        {\WriteOutput{\@charrb}}%
+    {\TagStrong}    {\WriteOutput{\@charrb}}%
+    {\TagMono}      {\WriteOutput{\@charrb}}%
+    {\TagStrike}    {\WriteOutput{\@charrb}}%
+    {\TagPar}       {\WriteOutput{\EndParagraph}}%
+    {\TagUList}     {\WriteOutput{\string\end{itemize}}}%
+    {\TagOList}     {\WriteOutput{\string\end{enumerate}}}%
+    {\TagItem}      {}%
+  }%
+  \IfStrEq{#1}{\TopTag}{}{%
+    \EmitWarning{Closing tag \CurrentTagName{} does not match
+      expected \TopTag}%
+  }%
+}
+\makeatother
+
+\newcommand*{\HandleTextChar}[1]{%
+  \IfStrEq{#1}{<}{%
+    \renewcommand*{\CurrentTagMode}{Open}%
+    \renewcommand*{\CurrentTagName}{}%
+    \renewcommand*{\ParserState}{ReadingTag}%
+  }{\WriteOutput{#1}}%
+}
+
+\makeatletter
+\newcommand*{\HandleTagChar}[1]{%
+  \IfStrEqCase{#1}{%
+    {/}{\renewcommand*{\CurrentTagMode}{Close}}%
+    {>}{%
+      \IfStrEqCase{\CurrentTagMode}{%
+        {Open}{\HandleOpenTag{\CurrentTagName}}
+        {Close}{\HandleCloseTag{\CurrentTagName}}
+      }%
+      \renewcommand*{\ParserState}{ReadingText}}%
+  }[\edef\CurrentTagName{\CurrentTagName #1}]%
+}
+\makeatother
+
+\ExplSyntaxOn
+\NewDocumentCommand{\ParseHtml}{m}{
+  \str_map_inline:Nn{#1}{
+    \IfStrEqCase{\ParserState}{%
+      {ReadingText}{\HandleTextChar{##1}}%
+      {ReadingTag}{\HandleTagChar{##1}}%
+    }
+  }
+}
+\ExplSyntaxOff
+
+\NewEnviron{html}{%
+  \ParseHtml\BODY%
+  \IfStrEq{\OpenTagStack}{}{}{%
+    \EmitWarning{There were unclosed tags: \OpenTagStack.}
+  }%
+  % We need a temporary file to write the generated LaTeX code in.
+  % TODO: we could possibly replace this with \scantokens
+  \newwrite\OutputFile
+  \immediate\openout\OutputFile=\jobname.tmp
+  \immediate\write\OutputFile{\OutputBuffer}
+  \immediate\closeout\OutputFile%
+  \input{\jobname.tmp}%
+}

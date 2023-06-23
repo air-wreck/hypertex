@@ -1,0 +1,42 @@
+\documentclass{article}
+\usepackage{hypertex}
+
+\begin{document}
+\begin{html}
+  <h1>Welcome to the Hyper\TeX{} Markup Language!</h1>
+  <p>
+    The Hyper\TeX{} Markup Language (HML) is a way to write \LaTeX{}
+    using HTML syntax, by implementing a primitive HTML parser entirely
+    in \LaTeX{} macros. For instance, here are some formatting examples:
+    <ul>
+      <li><em>Italicized text</em></li>
+      <li><strong>Boldface text</strong></li>
+      <li><s>Struck out text</s></li>
+      <li><tt>Monospace text</tt></li>
+    </ul>
+    You can even <em><strong>combine styles!</strong></em> The
+    possibilities are truly limited only by <s>your imagination</s> my
+    extremely janky and incomplete HTML parser. It is also possible to
+    inter-op with regular \LaTeX{} macros to some degree, so that you
+    can achieve effects like \textsc{Small Caps} in the usual way.
+  </p>
+  <p>
+    There is some amount of built-in error-checking. For example,
+    \texttt{hypertex} is able to detect and recover from
+    <unrecognized>unrecognized tags</unrecognized> and certain cases of
+    <em>mismatched open/close tags</strong>.
+  </p>
+  <h2>Okay, but why would I want to do this?</h2>
+  <p>
+    For many decades, \LaTeX{} has reigned supreme as the document
+    preparation markup language of choice for discerning professionals
+    in technical fields. However, many new users complain that it's
+    difficult to learn. That's where HML steps in: it lets you write
+    directly in HTML, a markup language that is ``clean,'' ``free of
+    weird stuff,'' and ``loved by millions around the world.''
+  </p>
+  <p>
+    Okay yeah you wouldn't, I just thought it'd be funny.
+  </p>
+\end{html}
+\end{document}
